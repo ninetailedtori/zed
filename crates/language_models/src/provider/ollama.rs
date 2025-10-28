@@ -9,7 +9,8 @@ use language_model::{
     LanguageModelId, LanguageModelName, LanguageModelProvider, LanguageModelProviderId,
     LanguageModelProviderName, LanguageModelProviderState, LanguageModelRequest,
     LanguageModelRequestTool, LanguageModelToolChoice, LanguageModelToolUse,
-    LanguageModelToolUseId, MessageContent, RateLimiter, Role, StopReason, TokenUsage,
+    LanguageModelToolUseId, MessageContent, OLLAMA_PROVIDER_ID, OLLAMA_PROVIDER_NAME, RateLimiter,
+    Role, StopReason, TokenUsage,
 };
 use menu;
 use ollama::{
@@ -33,9 +34,6 @@ use crate::ui::InstructionListItem;
 const OLLAMA_DOWNLOAD_URL: &str = "https://ollama.com/download";
 const OLLAMA_LIBRARY_URL: &str = "https://ollama.com/library";
 const OLLAMA_SITE: &str = "https://ollama.com/";
-
-const PROVIDER_ID: LanguageModelProviderId = LanguageModelProviderId::new("ollama");
-const PROVIDER_NAME: LanguageModelProviderName = LanguageModelProviderName::new("Ollama");
 
 const API_KEY_ENV_VAR_NAME: &str = "OLLAMA_API_KEY";
 static API_KEY_ENV_VAR: LazyLock<EnvVar> = env_var!(API_KEY_ENV_VAR_NAME);
@@ -216,11 +214,11 @@ impl LanguageModelProviderState for OllamaLanguageModelProvider {
 
 impl LanguageModelProvider for OllamaLanguageModelProvider {
     fn id(&self) -> LanguageModelProviderId {
-        PROVIDER_ID
+        OLLAMA_PROVIDER_ID
     }
 
     fn name(&self) -> LanguageModelProviderName {
-        PROVIDER_NAME
+        OLLAMA_PROVIDER_NAME
     }
 
     fn icon(&self) -> IconName {
@@ -439,11 +437,11 @@ impl LanguageModel for OllamaLanguageModel {
     }
 
     fn provider_id(&self) -> LanguageModelProviderId {
-        PROVIDER_ID
+        OLLAMA_PROVIDER_ID
     }
 
     fn provider_name(&self) -> LanguageModelProviderName {
-        PROVIDER_NAME
+        OLLAMA_PROVIDER_NAME
     }
 
     fn supports_tools(&self) -> bool {

@@ -56,6 +56,10 @@ pub const ZED_CLOUD_PROVIDER_ID: LanguageModelProviderId = LanguageModelProvider
 pub const ZED_CLOUD_PROVIDER_NAME: LanguageModelProviderName =
     LanguageModelProviderName::new("Zed");
 
+pub const OLLAMA_PROVIDER_ID: LanguageModelProviderId = LanguageModelProviderId::new("ollama");
+pub const OLLAMA_PROVIDER_NAME: LanguageModelProviderName =
+    LanguageModelProviderName::new("Ollama");
+
 pub fn init(client: Arc<Client>, cx: &mut App) {
     init_settings(cx);
     RefreshLlmTokenListener::register(client, cx);

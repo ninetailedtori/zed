@@ -135,8 +135,8 @@ pub fn find_related_excerpts<'a>(
         .read(cx)
         .available_models(cx)
         .find(|model| {
-            model.provider_id() == language_model::ANTHROPIC_PROVIDER_ID
-                && model.id() == LanguageModelId("claude-haiku-4-5-latest".into())
+            model.provider_id() == language_model::OLLAMA_PROVIDER_ID
+                && model.id() == LanguageModelId("qwen3:8b".into())
         })
     else {
         return Task::ready(Err(anyhow!("could not find claude model")));
@@ -539,6 +539,7 @@ async fn request_tool_call<T: JsonSchema>(
                 .to_string(),
             input_schema: serde_json::to_value(schema).unwrap(),
         }],
+        thinking_allowed: false,
         ..Default::default()
     };
 
