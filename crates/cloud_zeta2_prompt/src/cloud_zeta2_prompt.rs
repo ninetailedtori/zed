@@ -2,9 +2,9 @@
 pub mod retrieval_prompt;
 
 use anyhow::{Context as _, Result, anyhow};
+pub use cloud_llm_client::predict_edits_v3::Excerpt;
 use cloud_llm_client::predict_edits_v3::{
-    self, DiffPathFmt, Event, Excerpt, IncludedFile, Line, Point, PromptFormat,
-    ReferencedDeclaration,
+    self, DiffPathFmt, Event, IncludedFile, Line, Point, PromptFormat, ReferencedDeclaration,
 };
 use indoc::indoc;
 use ordered_float::OrderedFloat;
