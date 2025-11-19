@@ -30,6 +30,7 @@ use util::rel_path::RelPath;
 use workspace::Workspace;
 
 use crate::api::{AutocompleteRequest, AutocompleteResponse, FileChunk};
+use crate::jump::predict_jump;
 
 const CHANGE_GROUPING_LINE_SPAN: u32 = 8;
 const MAX_EVENT_COUNT: usize = 6;
@@ -198,11 +199,12 @@ impl SweepAi {
         &mut self,
         workspace: &WeakEntity<Workspace>,
         project: &Entity<Project>,
-        active_buffer: &Entity<Buffer>,
+        current_buffer: &Entity<Buffer>,
+        target_buffer: &Entity<Buffer>,
         position: language::Anchor,
         cx: &mut Context<Self>,
     ) -> Task<Result<Option<EditPrediction>>> {
-        let snapshot = active_buffer.read(cx).snapshot();
+        let snapshot = target_buffer.read(cx).snapshot();
         let debug_info = self.debug_info.clone();
         let Some(api_token) = self.api_token.clone() else {
             return Task::ready(Ok(None));
@@ -231,7 +233,7 @@ impl SweepAi {
                     .filter_map(|(project_path, _)| {
                         let buffer = project.read(cx).get_open_buffer(&project_path, cx)?;
 
-                        if active_buffer == &buffer {
+                        if target_buffer == &buffer {
                             None
                         } else {
                             Some(buffer.read(cx).snapshot())
@@ -247,6 +249,8 @@ impl SweepAi {
 
         let result = cx.background_spawn({
             let full_path = full_path.clone();
+            // todo! avoid cloning this so much?
+            let events = events.clone();
             async move {
                 let text = snapshot.text();
 
@@ -331,6 +335,7 @@ impl SweepAi {
                 };
 
                 let response: AutocompleteResponse = serde_json::from_slice(&body)?;
+                dbg!(&response);
 
                 let old_text = snapshot
                     .text_for_range(response.start_index..response.end_index)
@@ -350,17 +355,51 @@ impl SweepAi {
             }
         });
 
-        let buffer = active_buffer.clone();
+        let current_buffer = current_buffer.clone();
+        let target_buffer = target_buffer.clone();
+        let project = project.clone();
+        let workspace = workspace.clone();
 
-        cx.spawn(async move |_, cx| {
+        cx.spawn(async move |this, cx| {
             let (id, edits, old_snapshot) = result.await?;
 
-            if edits.is_empty() {
+            if edits.is_empty() && current_buffer == target_buffer {
+                let predict_jump_task = current_buffer.update(cx, |buffer, cx| {
+                    let snapshot = buffer.snapshot();
+                    let cursor_point = position.to_point(&snapshot);
+
+                    predict_jump(
+                        full_path,
+                        snapshot,
+                        cursor_point,
+                        project.clone(),
+                        events,
+                        cx,
+                    )
+                })?;
+
+                if let Some(jump_target) = predict_jump_task.await? {
+                    let prediction = this
+                        .update(cx, |this, cx| {
+                            this.request_completion(
+                                &workspace,
+                                &project,
+                                &current_buffer,
+                                &jump_target.buffer,
+                                jump_target.anchor,
+                                cx,
+                            )
+                        })?
+                        .await;
+
+                    return prediction;
+                }
+
                 return anyhow::Ok(None);
             }
 
             let Some((edits, new_snapshot, preview_task)) =
-                buffer.read_with(cx, |buffer, cx| {
+                target_buffer.read_with(cx, |buffer, cx| {
                     let new_snapshot = buffer.snapshot();
 
                     let edits: Arc<[(Range<Anchor>, Arc<str>)]> =
@@ -625,7 +664,8 @@ impl edit_prediction::EditPredictionProvider for SweepAiEditPredictionProvider {
             let completion_request = this.update(cx, |this, cx| {
                 this.last_request_timestamp = Instant::now();
                 this.sweep_ai.update(cx, |sweep_ai, cx| {
-                    sweep_ai.request_completion(&workspace, &project, &buffer, position, cx)
+                    sweep_ai
+                        .request_completion(&workspace, &project, &buffer, &buffer, position, cx)
                 })
             });
 

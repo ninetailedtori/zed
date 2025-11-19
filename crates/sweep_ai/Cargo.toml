@@ -18,7 +18,6 @@ anyhow.workspace = true
 arrayvec.workspace = true
 brotli.workspace = true
 client.workspace = true
-cloud_zeta2_prompt.workspace = true
 collections.workspace = true
 edit_prediction.workspace = true
 edit_prediction_context.workspace = true
@@ -28,6 +27,9 @@ gpui.workspace = true
 http_client.workspace = true
 indoc.workspace = true
 language.workspace = true
+language_model.workspace = true
+log.workspace = true
+open_ai.workspace = true
 project.workspace = true
 release_channel.workspace = true
 schemars.workspace = true
@@ -36,7 +38,9 @@ serde_json.workspace = true
 smol.workspace = true
 util.workspace = true
 workspace.workspace = true
-zeta2.workspace = true
+# todo!
+cloud_zeta2_prompt.workspace = true
+zeta2 = { workspace = true, features = ["eval-support"] }
 
 [dev-dependencies]
 gpui = { workspace = true, features = ["test-support"] }
