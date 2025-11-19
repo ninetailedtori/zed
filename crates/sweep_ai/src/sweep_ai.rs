@@ -90,6 +90,7 @@ pub struct SweepAi {
 struct SweepAiProject {
     events: VecDeque<Event>,
     registered_buffers: HashMap<gpui::EntityId, RegisteredBuffer>,
+    current_prediction: Option<CurrentEditPrediction>,
 }
 
 impl SweepAi {
@@ -142,6 +143,7 @@ impl SweepAi {
                 entry.insert(SweepAiProject {
                     events: VecDeque::with_capacity(MAX_EVENT_COUNT),
                     registered_buffers: HashMap::default(),
+                    current_prediction: None,
                 })
             }
         }
@@ -195,7 +197,79 @@ impl SweepAi {
         }
     }
 
-    pub fn request_completion(
+    fn current_prediction_for_buffer(
+        &self,
+        buffer: &Entity<Buffer>,
+        project: &Entity<Project>,
+        cx: &App,
+    ) -> Option<BufferEditPrediction<'_>> {
+        let project_state = self.projects.get(&project.entity_id())?;
+
+        let CurrentEditPrediction {
+            requested_by_buffer_id,
+            prediction,
+        } = project_state.current_prediction.as_ref()?;
+
+        if prediction.snapshot.remote_id() == buffer.read(cx).remote_id() {
+            Some(BufferEditPrediction::Local { prediction })
+        } else if *requested_by_buffer_id == buffer.entity_id() {
+            Some(BufferEditPrediction::Jump { prediction })
+        } else {
+            None
+        }
+    }
+
+    fn discard_current_prediction(&mut self, project: &Entity<Project>) {
+        if let Some(project_state) = self.projects.get_mut(&project.entity_id()) {
+            project_state.current_prediction.take();
+        };
+    }
+
+    pub fn refresh_prediction(
+        &mut self,
+        workspace: &WeakEntity<Workspace>,
+        project: &Entity<Project>,
+        current_buffer: &Entity<Buffer>,
+        position: language::Anchor,
+        cx: &mut Context<Self>,
+    ) -> Task<Result<()>> {
+        let prediction_task = self.request_prediction(
+            workspace,
+            project,
+            current_buffer,
+            current_buffer,
+            position,
+            cx,
+        );
+        let project = project.clone();
+        let current_buffer_id = current_buffer.entity_id();
+
+        cx.spawn(async move |this, cx| {
+            let Some(prediction) = prediction_task.await? else {
+                return Ok(());
+            };
+
+            this.update(cx, |this, cx| {
+                let project_state = this.get_or_init_sweep_ai_project(&project, cx);
+
+                if project_state
+                    .current_prediction
+                    .as_ref()
+                    .is_none_or(|old| old.should_replace_prediction(&old, &prediction.snapshot))
+                {
+                    project_state.current_prediction = Some(CurrentEditPrediction {
+                        requested_by_buffer_id: current_buffer_id,
+                        prediction,
+                    });
+                }
+            })
+            .ok();
+
+            anyhow::Ok(())
+        })
+    }
+
+    pub fn request_prediction(
         &mut self,
         workspace: &WeakEntity<Workspace>,
         project: &Entity<Project>,
@@ -307,6 +381,9 @@ impl SweepAi {
                     privacy_mode_enabled: false,
                 };
 
+                dbg!(&request_body.file_contents);
+                dbg!(&request_body.cursor_position);
+
                 let mut buf: Vec<u8> = Vec::new();
                 let writer = brotli::CompressorWriter::new(&mut buf, 4096, 11, 22);
                 serde_json::to_writer(writer, &request_body)?;
@@ -381,7 +458,7 @@ impl SweepAi {
                 if let Some(jump_target) = predict_jump_task.await? {
                     let prediction = this
                         .update(cx, |this, cx| {
-                            this.request_completion(
+                            this.request_prediction(
                                 &workspace,
                                 &project,
                                 &current_buffer,
@@ -536,22 +613,22 @@ impl Display for Event {
     }
 }
 
-#[derive(Debug, Clone)]
 struct CurrentEditPrediction {
-    buffer_id: EntityId,
-    completion: EditPrediction,
+    requested_by_buffer_id: EntityId,
+    prediction: EditPrediction,
 }
 
 impl CurrentEditPrediction {
-    fn should_replace_completion(&self, old_completion: &Self, snapshot: &BufferSnapshot) -> bool {
-        if self.buffer_id != old_completion.buffer_id {
+    // todo! rename completion -> prediction
+    fn should_replace_prediction(&self, old_completion: &Self, snapshot: &BufferSnapshot) -> bool {
+        if self.requested_by_buffer_id != old_completion.requested_by_buffer_id {
             return true;
         }
 
-        let Some(old_edits) = old_completion.completion.interpolate(snapshot) else {
+        let Some(old_edits) = old_completion.prediction.interpolate(snapshot) else {
             return true;
         };
-        let Some(new_edits) = self.completion.interpolate(snapshot) else {
+        let Some(new_edits) = self.prediction.interpolate(snapshot) else {
             return false;
         };
 
@@ -565,6 +642,13 @@ impl CurrentEditPrediction {
     }
 }
 
+/// A prediction from the perspective of a buffer.
+#[derive(Debug)]
+enum BufferEditPrediction<'a> {
+    Local { prediction: &'a EditPrediction },
+    Jump { prediction: &'a EditPrediction },
+}
+
 struct PendingCompletion {
     id: usize,
     _task: Task<()>,
@@ -575,7 +659,6 @@ pub struct SweepAiEditPredictionProvider {
     sweep_ai: Entity<SweepAi>,
     pending_completions: ArrayVec<PendingCompletion, 2>,
     next_pending_completion_id: usize,
-    current_completion: Option<CurrentEditPrediction>,
     last_request_timestamp: Instant,
     project: Entity<Project>,
 }
@@ -592,7 +675,6 @@ impl SweepAiEditPredictionProvider {
             sweep_ai,
             pending_completions: ArrayVec::new(),
             next_pending_completion_id: 0,
-            current_completion: None,
             last_request_timestamp: Instant::now(),
             project,
             workspace,
@@ -637,15 +719,15 @@ impl edit_prediction::EditPredictionProvider for SweepAiEditPredictionProvider {
         _debounce: bool,
         cx: &mut Context<Self>,
     ) {
-        if let Some(current_completion) = self.current_completion.as_ref() {
-            let snapshot = buffer.read(cx).snapshot();
-            if current_completion
-                .completion
-                .interpolate(&snapshot)
+        let sweep_ai = self.sweep_ai.read(cx);
+
+        if let Some(current) = sweep_ai.current_prediction_for_buffer(&buffer, &self.project, cx)
+            && let BufferEditPrediction::Local { prediction } = current
+            && prediction
+                .interpolate(&buffer.read(cx).snapshot())
                 .is_some()
-            {
-                return;
-            }
+        {
+            return;
         }
 
         let pending_completion_id = self.next_pending_completion_id;
@@ -661,59 +743,22 @@ impl edit_prediction::EditPredictionProvider for SweepAiEditPredictionProvider {
                 cx.background_executor().timer(timeout).await;
             }
 
-            let completion_request = this.update(cx, |this, cx| {
+            let refresh_task = this.update(cx, |this, cx| {
                 this.last_request_timestamp = Instant::now();
                 this.sweep_ai.update(cx, |sweep_ai, cx| {
-                    sweep_ai
-                        .request_completion(&workspace, &project, &buffer, &buffer, position, cx)
+                    sweep_ai.refresh_prediction(&workspace, &project, &buffer, position, cx)
                 })
             });
 
-            let completion = match completion_request {
-                Ok(completion_request) => {
-                    let completion_request = completion_request.await;
-                    completion_request.map(|c| {
-                        c.map(|completion| CurrentEditPrediction {
-                            buffer_id: buffer.entity_id(),
-                            completion,
-                        })
-                    })
-                }
-                Err(error) => Err(error),
-            };
-
-            let Some(new_completion) = completion
-                .context("edit prediction failed")
-                .log_err()
-                .flatten()
-            else {
-                this.update(cx, |this, cx| {
-                    if this.pending_completions[0].id == pending_completion_id {
-                        this.pending_completions.remove(0);
-                    } else {
-                        this.pending_completions.clear();
-                    }
-
-                    cx.notify();
-                })
-                .ok();
-                return;
-            };
+            if let Some(refresh_task) = refresh_task.ok() {
+                refresh_task.await.log_err();
+            }
 
             this.update(cx, |this, cx| {
                 if this.pending_completions[0].id == pending_completion_id {
                     this.pending_completions.remove(0);
                 } else {
                     this.pending_completions.clear();
-                }
-
-                if let Some(old_completion) = this.current_completion.as_ref() {
-                    let snapshot = buffer.read(cx).snapshot();
-                    if new_completion.should_replace_completion(old_completion, &snapshot) {
-                        this.current_completion = Some(new_completion);
-                    }
-                } else {
-                    this.current_completion = Some(new_completion);
                 }
 
                 cx.notify();
@@ -751,9 +796,11 @@ impl edit_prediction::EditPredictionProvider for SweepAiEditPredictionProvider {
         self.pending_completions.clear();
     }
 
-    fn discard(&mut self, _cx: &mut Context<Self>) {
+    fn discard(&mut self, cx: &mut Context<Self>) {
         self.pending_completions.clear();
-        self.current_completion.take();
+        self.sweep_ai.update(cx, |sweep_ai, _cx| {
+            sweep_ai.discard_current_prediction(&self.project);
+        });
     }
 
     fn suggest(
@@ -762,21 +809,27 @@ impl edit_prediction::EditPredictionProvider for SweepAiEditPredictionProvider {
         cursor_position: language::Anchor,
         cx: &mut Context<Self>,
     ) -> Option<edit_prediction::EditPrediction> {
-        let CurrentEditPrediction {
-            buffer_id,
-            completion,
-            ..
-        } = self.current_completion.as_mut()?;
+        let prediction =
+            self.sweep_ai
+                .read(cx)
+                .current_prediction_for_buffer(buffer, &self.project, cx)?;
 
-        // Invalidate previous completion if it was generated for a different buffer.
-        if *buffer_id != buffer.entity_id() {
-            self.current_completion.take();
-            return None;
-        }
+        let prediction = match prediction {
+            BufferEditPrediction::Local { prediction } => prediction,
+            BufferEditPrediction::Jump { prediction } => {
+                return Some(edit_prediction::EditPrediction::Jump {
+                    id: Some(prediction.id.to_string().into()),
+                    snapshot: prediction.snapshot.clone(),
+                    target: prediction.edits.first().unwrap().0.start,
+                });
+            }
+        };
 
         let buffer = buffer.read(cx);
-        let Some(edits) = completion.interpolate(&buffer.snapshot()) else {
-            self.current_completion.take();
+        let Some(edits) = prediction.interpolate(&buffer.snapshot()) else {
+            self.sweep_ai.update(cx, |sweep_ai, _cx| {
+                sweep_ai.discard_current_prediction(&self.project);
+            });
             return None;
         };
 
@@ -811,9 +864,9 @@ impl edit_prediction::EditPredictionProvider for SweepAiEditPredictionProvider {
         }
 
         Some(edit_prediction::EditPrediction::Local {
-            id: Some(completion.id.to_string().into()),
+            id: Some(prediction.id.to_string().into()),
             edits: edits[edit_start_ix..edit_end_ix].to_vec(),
-            edit_preview: Some(completion.edit_preview.clone()),
+            edit_preview: Some(prediction.edit_preview.clone()),
         })
     }
 }
