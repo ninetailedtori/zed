@@ -6,6 +6,8 @@ use settings_macros::MergeFrom;
 
 use std::sync::Arc;
 
+use crate::serialize_optional_f32_with_two_decimal_places;
+
 #[skip_serializing_none]
 #[derive(Default, Clone, Debug, Serialize, Deserialize, PartialEq, JsonSchema, MergeFrom)]
 pub struct AllLanguageModelSettingsContent {
@@ -46,7 +48,7 @@ pub struct AnthropicAvailableModel {
     /// Configuration of Anthropic's caching API.
     pub cache_configuration: Option<LanguageModelCacheConfiguration>,
     pub max_output_tokens: Option<u64>,
-    #[serde(serialize_with = "crate::serialize_optional_f32_with_two_decimal_places")]
+    #[serde(serialize_with = "serialize_optional_f32_with_two_decimal_places")]
     pub default_temperature: Option<f32>,
     #[serde(default)]
     pub extra_beta_headers: Vec<String>,
@@ -72,7 +74,7 @@ pub struct BedrockAvailableModel {
     pub max_tokens: u64,
     pub cache_configuration: Option<LanguageModelCacheConfiguration>,
     pub max_output_tokens: Option<u64>,
-    #[serde(serialize_with = "crate::serialize_optional_f32_with_two_decimal_places")]
+    #[serde(serialize_with = "serialize_optional_f32_with_two_decimal_places")]
     pub default_temperature: Option<f32>,
     pub mode: Option<ModelMode>,
 }
@@ -334,7 +336,7 @@ pub struct ZedDotDevAvailableModel {
     /// Indicates whether this custom model supports caching.
     pub cache_configuration: Option<LanguageModelCacheConfiguration>,
     /// The default temperature to use for this model.
-    #[serde(serialize_with = "crate::serialize_optional_f32_with_two_decimal_places")]
+    #[serde(serialize_with = "serialize_optional_f32_with_two_decimal_places")]
     pub default_temperature: Option<f32>,
     /// Any extra beta headers to provide when using the model.
     #[serde(default)]

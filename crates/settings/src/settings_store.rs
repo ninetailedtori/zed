@@ -31,12 +31,15 @@ use util::{
 pub type EditorconfigProperties = ec4rs::Properties;
 
 use crate::{
-    ActiveSettingsProfileName, FontFamilyName, IconThemeName, LanguageSettingsContent,
-    LanguageToSettingsMap, ThemeName, VsCodeSettings, WorktreeId,
-    merge_from::MergeFrom,
-    settings_content::{
+    VsCodeSettings, WorktreeId,
+    content::{
+        ActiveSettingsProfileName, FontFamilyName, IconThemeName, LanguageSettingsContent,
+        LanguageToSettingsMap, ThemeName,
+    },
+    content::{
         ExtensionsSettingsContent, ProjectSettingsContent, SettingsContent, UserSettingsContent,
     },
+    merge_from::MergeFrom,
 };
 
 use settings_json::{infer_json_indent_size, parse_json_with_comments, update_value_in_json_text};
@@ -1357,8 +1360,10 @@ mod tests {
     use std::num::NonZeroU32;
 
     use crate::{
-        ClosePosition, ItemSettingsContent, VsCodeSettingsSource, default_settings,
-        settings_content::LanguageSettingsContent, test_settings,
+        VsCodeSettingsSource,
+        content::LanguageSettingsContent,
+        content::{ClosePosition, ItemSettingsContent},
+        default_settings, test_settings,
     };
 
     use super::*;

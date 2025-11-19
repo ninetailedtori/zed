@@ -4,9 +4,12 @@ mod extension;
 mod language;
 mod language_model;
 mod project;
+mod serde_helper;
 mod terminal;
 mod theme;
 mod workspace;
+
+pub mod merge_from;
 
 pub use agent::*;
 pub use editor::*;
@@ -14,6 +17,7 @@ pub use extension::*;
 pub use language::*;
 pub use language_model::*;
 pub use project::*;
+pub use serde_helper::*;
 pub use terminal::*;
 pub use theme::*;
 pub use workspace::*;
@@ -30,7 +34,10 @@ use std::env;
 use std::sync::Arc;
 pub use util::serde::default_true;
 
-use crate::{ActiveSettingsProfileName, merge_from};
+#[derive(Clone, Debug, PartialEq)]
+pub struct ActiveSettingsProfileName(pub String);
+
+impl gpui::Global for ActiveSettingsProfileName {}
 
 #[skip_serializing_none]
 #[derive(Debug, PartialEq, Default, Clone, Serialize, Deserialize, JsonSchema, MergeFrom)]

@@ -1,0 +1,28 @@
+[package]
+name = "settings_content"
+version = "0.1.0"
+publish.workspace = true
+edition.workspace = true
+
+[lints]
+workspace = true
+
+[lib]
+path = "src/settings_content.rs"
+doctest = false
+
+[dependencies]
+collections.workspace = true
+derive_more.workspace = true
+gpui.workspace = true
+# inventory.workspace = true
+# migrator.workspace = true
+release_channel.workspace = true
+schemars.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+serde_repr.workspace = true
+serde_with.workspace = true
+settings_macros.workspace = true
+strum.workspace = true
+util.workspace = true

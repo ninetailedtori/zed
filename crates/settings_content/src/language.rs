@@ -8,7 +8,7 @@ use serde_with::skip_serializing_none;
 use settings_macros::MergeFrom;
 use std::sync::Arc;
 
-use crate::{ExtendingVec, merge_from};
+use crate::ExtendingVec;
 
 #[skip_serializing_none]
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
@@ -30,7 +30,7 @@ pub struct AllLanguageSettingsContent {
     pub file_types: Option<HashMap<Arc<str>, ExtendingVec<String>>>,
 }
 
-impl merge_from::MergeFrom for AllLanguageSettingsContent {
+impl crate::merge_from::MergeFrom for AllLanguageSettingsContent {
     fn merge_from(&mut self, other: &Self) {
         self.file_types.merge_from(&other.file_types);
         self.features.merge_from(&other.features);
@@ -907,7 +907,7 @@ pub enum IndentGuideBackgroundColoring {
 
 #[cfg(test)]
 mod test {
-    use super::*;
+    use crate::*;
 
     #[test]
     fn test_formatter_deserialization() {

@@ -9,7 +9,9 @@ use std::{fmt::Display, sync::Arc};
 
 use serde_with::skip_serializing_none;
 
-use crate::serialize_f32_with_two_decimal_places;
+use crate::{
+    serialize_f32_with_two_decimal_places, serialize_optional_f32_with_two_decimal_places,
+};
 
 /// Settings for rendering text in UI and text buffers.
 
@@ -18,7 +20,7 @@ use crate::serialize_f32_with_two_decimal_places;
 pub struct ThemeSettingsContent {
     /// The default font size for text in the UI.
     #[serde(default)]
-    #[serde(serialize_with = "crate::serialize_optional_f32_with_two_decimal_places")]
+    #[serde(serialize_with = "serialize_optional_f32_with_two_decimal_places")]
     pub ui_font_size: Option<f32>,
     /// The name of a font to use for rendering in the UI.
     #[serde(default)]
@@ -45,7 +47,7 @@ pub struct ThemeSettingsContent {
     pub buffer_font_fallbacks: Option<Vec<FontFamilyName>>,
     /// The default font size for rendering in text buffers.
     #[serde(default)]
-    #[serde(serialize_with = "crate::serialize_optional_f32_with_two_decimal_places")]
+    #[serde(serialize_with = "serialize_optional_f32_with_two_decimal_places")]
     pub buffer_font_size: Option<f32>,
     /// The weight of the editor font in CSS units from 100 to 900.
     #[serde(default)]
@@ -60,11 +62,11 @@ pub struct ThemeSettingsContent {
     pub buffer_font_features: Option<FontFeatures>,
     /// The font size for agent responses in the agent panel. Falls back to the UI font size if unset.
     #[serde(default)]
-    #[serde(serialize_with = "crate::serialize_optional_f32_with_two_decimal_places")]
+    #[serde(serialize_with = "serialize_optional_f32_with_two_decimal_places")]
     pub agent_ui_font_size: Option<f32>,
     /// The font size for user messages in the agent panel.
     #[serde(default)]
-    #[serde(serialize_with = "crate::serialize_optional_f32_with_two_decimal_places")]
+    #[serde(serialize_with = "serialize_optional_f32_with_two_decimal_places")]
     pub agent_buffer_font_size: Option<f32>,
     /// The name of the Zed theme to use.
     #[serde(default)]
@@ -1176,8 +1178,10 @@ impl From<FontWeightContent> for FontWeight {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use crate::*;
     use serde_json::json;
+
+    use gpui::FontWeight;
 
     #[test]
     fn test_buffer_line_height_deserialize_valid() {

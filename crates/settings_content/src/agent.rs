@@ -6,7 +6,7 @@ use serde_with::skip_serializing_none;
 use settings_macros::MergeFrom;
 use std::{borrow::Cow, path::PathBuf, sync::Arc};
 
-use crate::DockPosition;
+use crate::{DockPosition, serialize_optional_f32_with_two_decimal_places};
 
 #[skip_serializing_none]
 #[derive(Clone, PartialEq, Serialize, Deserialize, JsonSchema, MergeFrom, Debug, Default)]
@@ -26,12 +26,12 @@ pub struct AgentSettingsContent {
     /// Default width in pixels when the agent panel is docked to the left or right.
     ///
     /// Default: 640
-    #[serde(serialize_with = "crate::serialize_optional_f32_with_two_decimal_places")]
+    #[serde(serialize_with = "serialize_optional_f32_with_two_decimal_places")]
     pub default_width: Option<f32>,
     /// Default height in pixels when the agent panel is docked to the bottom.
     ///
     /// Default: 320
-    #[serde(serialize_with = "crate::serialize_optional_f32_with_two_decimal_places")]
+    #[serde(serialize_with = "serialize_optional_f32_with_two_decimal_places")]
     pub default_height: Option<f32>,
     /// The default model to use when creating new chats and for other features when a specific model is not specified.
     pub default_model: Option<LanguageModelSelection>,
@@ -236,7 +236,7 @@ pub enum CompletionMode {
 pub struct LanguageModelParameters {
     pub provider: Option<LanguageModelProviderSetting>,
     pub model: Option<SharedString>,
-    #[serde(serialize_with = "crate::serialize_optional_f32_with_two_decimal_places")]
+    #[serde(serialize_with = "serialize_optional_f32_with_two_decimal_places")]
     pub temperature: Option<f32>,
 }
 
