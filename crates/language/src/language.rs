@@ -802,7 +802,7 @@ pub struct LanguageConfig {
     pub line_comments: Vec<Arc<str>>,
     /// Delimiters and configuration for recognizing and formatting block comments.
     #[serde(default)]
-    pub block_comment: Option<BlockCommentConfig>,
+    pub block_comments: Option<BlockCommentConfig>,
     /// Delimiters and configuration for recognizing and formatting documentation comments.
     #[serde(default, alias = "documentation")]
     pub documentation_comment: Option<BlockCommentConfig>,
@@ -1045,7 +1045,7 @@ impl Default for LanguageConfig {
             decrease_indent_patterns: Default::default(),
             autoclose_before: Default::default(),
             line_comments: Default::default(),
-            block_comment: Default::default(),
+            block_comments: Default::default(),
             documentation_comment: Default::default(),
             rewrap_prefixes: Default::default(),
             scope_opt_in_language_servers: Default::default(),
@@ -2123,7 +2123,7 @@ impl LanguageScope {
     pub fn block_comment(&self) -> Option<&BlockCommentConfig> {
         Override::as_option(
             self.config_override().map(|o| &o.block_comment),
-            self.language.config.block_comment.as_ref(),
+            self.language.config.block_comments.as_ref(),
         )
     }
 
@@ -2941,23 +2941,23 @@ mod tests {
 
     #[test]
     fn test_deserializing_comments_backwards_compat() {
-        // current version of `block_comment` and `documentation_comment` work
+        // current version of `block_comments` and `documentation_comment` work
         {
             let config: LanguageConfig = ::toml::from_str(
                 r#"
                 name = "Foo"
-                block_comment = { start = "a", end = "b", prefix = "c", tab_size = 1 }
+                block_comments = { start = "a", end = "b", prefix = "c", tab_size = 1 }
                 documentation_comment = { start = "d", end = "e", prefix = "f", tab_size = 2 }
                 "#,
             )
             .unwrap();
-            assert_matches!(config.block_comment, Some(BlockCommentConfig { .. }));
+            assert_matches!(config.block_comments, Some(BlockCommentConfig { .. }));
             assert_matches!(
                 config.documentation_comment,
                 Some(BlockCommentConfig { .. })
             );
 
-            let block_config = config.block_comment.unwrap();
+            let block_config = config.block_comments.unwrap();
             assert_eq!(block_config.start.as_ref(), "a");
             assert_eq!(block_config.end.as_ref(), "b");
             assert_eq!(block_config.prefix.as_ref(), "c");
@@ -2991,18 +2991,18 @@ mod tests {
             assert_eq!(config.tab_size, 1);
         }
 
-        // old block_comment format is read into BlockCommentConfig
+        // old block_comments format is read into BlockCommentConfig
         {
             let config: LanguageConfig = ::toml::from_str(
                 r#"
                 name = "Foo"
-                block_comment = ["a", "b"]
+                block_comments = ["a", "b"]
                 "#,
             )
             .unwrap();
-            assert_matches!(config.block_comment, Some(BlockCommentConfig { .. }));
+            assert_matches!(config.block_comments, Some(BlockCommentConfig { .. }));
 
-            let config = config.block_comment.unwrap();
+            let config = config.block_comments.unwrap();
             assert_eq!(config.start.as_ref(), "a");
             assert_eq!(config.end.as_ref(), "b");
             assert_eq!(config.prefix.as_ref(), "");

@@ -291,7 +291,7 @@ impl EditorLspTestContext {
                     path_suffixes: vec!["html".into()],
                     ..Default::default()
                 },
-                block_comment: Some(BlockCommentConfig {
+                block_comments: Some(BlockCommentConfig {
                     start: "<!--".into(),
                     prefix: "".into(),
                     end: "-->".into(),

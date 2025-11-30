@@ -145,6 +145,8 @@ pub struct ConfirmCodeAction {
 #[serde(deny_unknown_fields)]
 pub struct ToggleComments {
     #[serde(default)]
+    pub do_block: bool,
+    #[serde(default)]
     pub advance_downwards: bool,
     #[serde(default)]
     pub ignore_indent: bool,

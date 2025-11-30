@@ -3476,7 +3476,7 @@ async fn test_newline_documentation_comments(cx: &mut TestAppContext) {
             },
             Some(tree_sitter_rust::LANGUAGE.into()),
         )
-        .with_override_query("[(line_comment)(block_comment)] @comment.inclusive")
+        .with_override_query("[(line_comment)(block_comments)] @comment.inclusive")
         .unwrap(),
     );
 
@@ -3679,7 +3679,7 @@ async fn test_newline_comments_with_block_comment(cx: &mut TestAppContext) {
     let lua_language = Arc::new(Language::new(
         LanguageConfig {
             line_comments: vec!["--".into()],
-            block_comment: Some(language::BlockCommentConfig {
+            block_comments: Some(language::BlockCommentConfig {
                 start: "--[[".into(),
                 prefix: "".into(),
                 end: "]]".into(),
@@ -6363,7 +6363,7 @@ async fn test_rewrap(cx: &mut TestAppContext) {
             },
             Some(tree_sitter_rust::LANGUAGE.into()),
         )
-        .with_override_query("[(line_comment)(block_comment)] @comment.inclusive")
+        .with_override_query("[(line_comment)(block_comments)] @comment.inclusive")
         .unwrap(),
     );
 
@@ -6701,7 +6701,7 @@ async fn test_rewrap_block_comments(cx: &mut TestAppContext) {
             LanguageConfig {
                 name: "Rust".into(),
                 line_comments: vec!["// ".into()],
-                block_comment: Some(BlockCommentConfig {
+                block_comments: Some(BlockCommentConfig {
                     start: "/*".into(),
                     end: "*/".into(),
                     prefix: "* ".into(),
@@ -6718,7 +6718,7 @@ async fn test_rewrap_block_comments(cx: &mut TestAppContext) {
             },
             Some(tree_sitter_rust::LANGUAGE.into()),
         )
-        .with_override_query("[(line_comment) (block_comment)] @comment.inclusive")
+        .with_override_query("[(line_comment) (block_comments)] @comment.inclusive")
         .unwrap(),
     );
 
@@ -16304,6 +16304,7 @@ async fn test_toggle_comment_ignore_indent(cx: &mut TestAppContext) {
     cx.update_buffer(|buffer, cx| buffer.set_language(Some(language), cx));
 
     let toggle_comments = &ToggleComments {
+        do_block: false,
         advance_downwards: false,
         ignore_indent: true,
     };
@@ -16435,6 +16436,7 @@ async fn test_advance_downward_on_toggle_comment(cx: &mut TestAppContext) {
     });
 
     let toggle_comments = &ToggleComments {
+        do_block: false,
         advance_downwards: true,
         ignore_indent: false,
     };
@@ -16557,7 +16559,7 @@ async fn test_toggle_block_comment(cx: &mut TestAppContext) {
         Language::new(
             LanguageConfig {
                 name: "HTML".into(),
-                block_comment: Some(BlockCommentConfig {
+                block_comments: Some(BlockCommentConfig {
                     start: "<!-- ".into(),
                     prefix: "".into(),
                     end: " -->".into(),

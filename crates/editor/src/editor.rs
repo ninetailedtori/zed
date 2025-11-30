@@ -15526,6 +15526,7 @@ impl Editor {
             let snapshot = this.buffer.read(cx).read(cx);
             let empty_str: Arc<str> = Arc::default();
             let mut suffixes_inserted = Vec::new();
+            let do_block = action.do_block;
             let ignore_indent = action.ignore_indent;
 
             fn comment_prefix_range(
