@@ -799,7 +799,7 @@ pub struct LanguageConfig {
     /// A language can have multiple flavours of line comments. All of the provided line comments are
     /// used for comment continuations on the next line, but only the first one is used for Editor::ToggleComments.
     #[serde(default)]
-    pub line_comments: Vec<Arc<str>>,
+    pub line_comments: Option<LineCommentConfig>,
     /// Delimiters and configuration for recognizing and formatting block comments.
     #[serde(default)]
     pub block_comments: Option<BlockCommentConfig>,
@@ -925,18 +925,58 @@ pub struct JsxTagAutoCloseConfig {
     pub erroneous_close_tag_name_node_name: Option<String>,
 }
 
+/// The configuration for line comments for this language.
+#[derive(Clone, Debug, JsonSchema, PartialEq)]
+pub struct LineCommentConfig {
+    /// The prefix to append to the start of a new line within a line comment.
+    pub prefix: Vec<Arc<str>>,
+    /// The line comment type tag to add to this configuration.
+    pub comment_type: Vec<Arc<str>>,
+}
+
+impl<'de> Deserialize<'de> for LineCommentConfig {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        #[serde(untagged)]
+        enum LineCommentConfigHelper {
+            New {
+                prefix: Vec<Arc<str>>,
+                comment_type: Vec<Arc<str>>
+            },
+            Old(),
+        }
+
+        let helper = <LineCommentConfigHelper as Deserialize>::deserialize(deserializer)?;
+        match helper {
+            LineCommentConfigHelper::New {
+                prefix,
+                comment_type,
+            } => Ok(LineCommentConfig {
+                prefix,
+                comment_type,
+            }),
+            LineCommentConfigHelper::Old() => Ok(LineCommentConfig {
+                prefix: vec!["".into()],
+                comment_type: vec!["".into()],
+            }),
+        }
+    }
+}
+
 /// The configuration for block comments for this language.
 #[derive(Clone, Debug, JsonSchema, PartialEq)]
 pub struct BlockCommentConfig {
-    /// A start tag of block comment.
-    pub start: Arc<str>,
-    /// A end tag of block comment.
-    pub end: Arc<str>,
-    /// A character to add as a prefix when a new line is added to a block comment.
-    pub prefix: Arc<str>,
-    /// A indent to add for prefix and end line upon new line.
-    #[schemars(range(min = 1, max = 128))]
-    pub tab_size: u32,
+    /// The starting string to prefix a block comment with.
+    pub start: Vec<Arc<str>>,
+    /// The ending string to suffix a block comment with.
+    pub end: Vec<Arc<str>>,
+    /// The prefix to append to the start of a new line within a block comment.
+    pub prefix: Vec<Arc<str>>,
+    /// The block comment type tag to add to this configuration.
+    pub comment_type: Vec<Arc<str>>,
 }
 
 impl<'de> Deserialize<'de> for BlockCommentConfig {
@@ -948,31 +988,32 @@ impl<'de> Deserialize<'de> for BlockCommentConfig {
         #[serde(untagged)]
         enum BlockCommentConfigHelper {
             New {
-                start: Arc<str>,
-                end: Arc<str>,
-                prefix: Arc<str>,
-                tab_size: u32,
+                start: Vec<Arc<str>>,
+                end: Vec<Arc<str>>,
+                prefix: Vec<Arc<str>>,
+                comment_type: Vec<Arc<str>>,
             },
-            Old([Arc<str>; 2]),
+            Old([Vec<Arc<str>>; 2]),
         }
 
-        match BlockCommentConfigHelper::deserialize(deserializer)? {
+        let helper = <BlockCommentConfigHelper as Deserialize>::deserialize(deserializer)?;
+        match helper {
             BlockCommentConfigHelper::New {
                 start,
                 end,
                 prefix,
-                tab_size,
+                comment_type,
             } => Ok(BlockCommentConfig {
                 start,
                 end,
                 prefix,
-                tab_size,
+                comment_type,
             }),
             BlockCommentConfigHelper::Old([start, end]) => Ok(BlockCommentConfig {
                 start,
                 end,
-                prefix: "".into(),
-                tab_size: 0,
+                prefix: vec!["".into()],
+                comment_type: vec!["".into()],
             }),
         }
     }
@@ -990,9 +1031,9 @@ pub struct LanguageScope {
 #[derive(Clone, Deserialize, Default, Debug, JsonSchema)]
 pub struct LanguageConfigOverride {
     #[serde(default)]
-    pub line_comments: Override<Vec<Arc<str>>>,
+    pub line_comments: Override<LineCommentConfig>,
     #[serde(default)]
-    pub block_comment: Override<BlockCommentConfig>,
+    pub block_comments: Override<BlockCommentConfig>,
     #[serde(skip)]
     pub disabled_bracket_ixs: Vec<u16>,
     #[serde(default)]
@@ -2109,20 +2150,18 @@ impl LanguageScope {
         self.language.config.collapsed_placeholder.as_ref()
     }
 
-    /// Returns line prefix that is inserted in e.g. line continuations or
-    /// in `toggle comments` action.
-    pub fn line_comment_prefixes(&self) -> &[Arc<str>] {
+    /// Config for line comments for this language.
+    pub fn line_comments(&self) -> Option<&LineCommentConfig> {
         Override::as_option(
             self.config_override().map(|o| &o.line_comments),
-            Some(&self.language.config.line_comments),
+            self.language.config.line_comments.as_ref(),
         )
-        .map_or([].as_slice(), |e| e.as_slice())
     }
 
     /// Config for block comments for this language.
-    pub fn block_comment(&self) -> Option<&BlockCommentConfig> {
+    pub fn block_comments(&self) -> Option<&BlockCommentConfig> {
         Override::as_option(
-            self.config_override().map(|o| &o.block_comment),
+            self.config_override().map(|o| &o.block_comments),
             self.language.config.block_comments.as_ref(),
         )
     }
@@ -2958,7 +2997,7 @@ mod tests {
             );
 
             let block_config = config.block_comments.unwrap();
-            assert_eq!(block_config.start.as_ref(), "a");
+            assert_eq!(block_config.start.as_ref(), "a".to_string());
             assert_eq!(block_config.end.as_ref(), "b");
             assert_eq!(block_config.prefix.as_ref(), "c");
             assert_eq!(block_config.tab_size, 1);
