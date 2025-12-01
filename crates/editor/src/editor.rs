@@ -15709,7 +15709,7 @@ impl Editor {
                     start: full_comment_prefix,
                     end: comment_suffix,
                     ..
-                }) = language.block_comment()
+                }) = language.block_comments()
                 {
                     let comment_prefix = full_comment_prefix.trim_end_matches(' ');
                     let comment_prefix_whitespace = &full_comment_prefix[comment_prefix.len()..];

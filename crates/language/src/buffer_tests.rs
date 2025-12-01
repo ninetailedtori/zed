@@ -2434,7 +2434,7 @@ fn test_language_scope_at_with_javascript(cx: &mut App) {
                     "element".into(),
                     LanguageConfigOverride {
                         line_comments: Override::Remove { remove: true },
-                        block_comment: Override::Set(BlockCommentConfig {
+                        block_comments: Override::Set(BlockCommentConfig {
                             start: "{/*".into(),
                             prefix: "".into(),
                             end: "*/}".into(),
