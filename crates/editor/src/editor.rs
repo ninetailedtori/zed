@@ -15706,13 +15706,22 @@ impl Editor {
                         }));
                     }
                 } else if let Some(BlockCommentConfig {
-                    start: full_comment_prefix,
-                    end: comment_suffix,
+                    start,
+                    end,
+                    prefix: full_comment_prefix,
                     ..
                 }) = language.block_comments()
                 {
+                    let first_comment_prefix = start.trim_end_matches(' ');
                     let comment_prefix = full_comment_prefix.trim_end_matches(' ');
                     let comment_prefix_whitespace = &full_comment_prefix[comment_prefix.len()..];
+                    let first_prefix_range = comment_prefix_range(
+                        snapshot.deref(),
+                        start_row,
+                        first_comment_prefix,
+                        comment_prefix_whitespace,
+                        ignore_indent,
+                    );
                     let prefix_range = comment_prefix_range(
                         snapshot.deref(),
                         start_row,
@@ -15723,8 +15732,8 @@ impl Editor {
                     let suffix_range = comment_suffix_range(
                         snapshot.deref(),
                         end_row,
-                        comment_suffix.trim_start_matches(' '),
-                        comment_suffix.starts_with(' '),
+                        end.trim_start_matches(' '),
+                        end.starts_with(' '),
                     );
 
                     if prefix_range.is_empty() || suffix_range.is_empty() {
@@ -15732,8 +15741,8 @@ impl Editor {
                             prefix_range.start..prefix_range.start,
                             full_comment_prefix.clone(),
                         ));
-                        edits.push((suffix_range.end..suffix_range.end, comment_suffix.clone()));
-                        suffixes_inserted.push((end_row, comment_suffix.len()));
+                        edits.push((suffix_range.end..suffix_range.end, end.clone()));
+                        suffixes_inserted.push((end_row, end.len()));
                     } else {
                         edits.push((prefix_range, empty_str.clone()));
                         edits.push((suffix_range, empty_str.clone()));

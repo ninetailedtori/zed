@@ -803,9 +803,6 @@ pub struct LanguageConfig {
     /// Delimiters and configuration for recognizing and formatting block comments.
     #[serde(default)]
     pub block_comments: Option<BlockCommentConfig>,
-    /// Delimiters and configuration for recognizing and formatting documentation comments.
-    #[serde(default, alias = "documentation")]
-    pub documentation_comment: Option<BlockCommentConfig>,
     /// A list of additional regex patterns that should be treated as prefixes
     /// for creating boundaries during rewrapping, ensuring content from one
     /// prefixed section doesn't merge with another (e.g., markdown list items).
@@ -925,13 +922,26 @@ pub struct JsxTagAutoCloseConfig {
     pub erroneous_close_tag_name_node_name: Option<String>,
 }
 
+/// Contains tags indicating the comment type (line or block).
+#[derive(Clone, Debug, Deserialize, Eq, Hash, JsonSchema, PartialEq)]
+pub enum CommentTypeTag {
+    Line(CommentType),
+    Block(CommentType)
+}
+
+/// Contains tags indicating the comment type (generic, inner doc, outer doc).
+#[derive(Clone, Debug, Deserialize, Eq, Hash, JsonSchema, PartialEq)]
+pub enum CommentType {
+    Generic,
+    Inner,
+    Outer
+}
+
 /// The configuration for line comments for this language.
 #[derive(Clone, Debug, JsonSchema, PartialEq)]
 pub struct LineCommentConfig {
-    /// The prefix to append to the start of a new line within a line comment.
-    pub prefix: Vec<Arc<str>>,
-    /// The line comment type tag to add to this configuration.
-    pub comment_type: Vec<Arc<str>>,
+    /// This contains a hash map of key-value pairs, where comment type maps to prefix.
+    pub prefixes: HashMap<CommentTypeTag, Arc<str>>
 }
 
 impl<'de> Deserialize<'de> for LineCommentConfig {
@@ -943,40 +953,49 @@ impl<'de> Deserialize<'de> for LineCommentConfig {
         #[serde(untagged)]
         enum LineCommentConfigHelper {
             New {
-                prefix: Vec<Arc<str>>,
-                comment_type: Vec<Arc<str>>
+                prefixes: HashMap<CommentTypeTag, Arc<str>>,
             },
-            Old(),
+            Old {
+                prefix: Arc<str>
+            },
         }
 
         let helper = <LineCommentConfigHelper as Deserialize>::deserialize(deserializer)?;
         match helper {
             LineCommentConfigHelper::New {
-                prefix,
-                comment_type,
+                prefixes
             } => Ok(LineCommentConfig {
-                prefix,
-                comment_type,
+                prefixes
             }),
-            LineCommentConfigHelper::Old() => Ok(LineCommentConfig {
-                prefix: vec!["".into()],
-                comment_type: vec!["".into()],
+            LineCommentConfigHelper::Old {
+                prefix
+            } => Ok(LineCommentConfig {
+                prefixes: HashMap::from_iter([(
+                    CommentTypeTag::Line(CommentType::Generic),
+                    prefix.into()
+                )]),
             }),
         }
     }
 }
 
+/// Helper for BlockCommentConfig struct.
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq)]
+pub struct BlockCommentStruct {
+    /// The starting string to prefix a block comment with.
+    pub start: Arc<str>,
+    /// The ending string to suffix a block comment with.
+    pub end: Arc<str>,
+    /// The prefix to append to the start of a new line within a block comment.
+    pub prefix: Arc<str>,
+}
+
 /// The configuration for block comments for this language.
 #[derive(Clone, Debug, JsonSchema, PartialEq)]
 pub struct BlockCommentConfig {
-    /// The starting string to prefix a block comment with.
-    pub start: Vec<Arc<str>>,
-    /// The ending string to suffix a block comment with.
-    pub end: Vec<Arc<str>>,
-    /// The prefix to append to the start of a new line within a block comment.
-    pub prefix: Vec<Arc<str>>,
-    /// The block comment type tag to add to this configuration.
-    pub comment_type: Vec<Arc<str>>,
+    /// This contains a hash map of key-value pairs, where the comment type maps to a struct
+    /// containing the starting prefix, ending suffix, and middle prefix strings.
+    pub prefixes: HashMap<CommentTypeTag, BlockCommentStruct>,
 }
 
 impl<'de> Deserialize<'de> for BlockCommentConfig {
@@ -988,10 +1007,7 @@ impl<'de> Deserialize<'de> for BlockCommentConfig {
         #[serde(untagged)]
         enum BlockCommentConfigHelper {
             New {
-                start: Vec<Arc<str>>,
-                end: Vec<Arc<str>>,
-                prefix: Vec<Arc<str>>,
-                comment_type: Vec<Arc<str>>,
+                prefixes: HashMap<CommentTypeTag, BlockCommentStruct>,
             },
             Old([Vec<Arc<str>>; 2]),
         }
@@ -999,21 +1015,19 @@ impl<'de> Deserialize<'de> for BlockCommentConfig {
         let helper = <BlockCommentConfigHelper as Deserialize>::deserialize(deserializer)?;
         match helper {
             BlockCommentConfigHelper::New {
-                start,
-                end,
-                prefix,
-                comment_type,
+                prefixes
             } => Ok(BlockCommentConfig {
-                start,
-                end,
-                prefix,
-                comment_type,
+                prefixes
             }),
             BlockCommentConfigHelper::Old([start, end]) => Ok(BlockCommentConfig {
-                start,
-                end,
-                prefix: vec!["".into()],
-                comment_type: vec!["".into()],
+                prefixes: HashMap::from_iter([(
+                    CommentTypeTag::Block(CommentType::Generic),
+                    BlockCommentStruct {
+                        start: "".into(),
+                        end: "".into(),
+                        prefix: "".into(),
+                    }
+                )]),
             }),
         }
     }
@@ -1087,7 +1101,6 @@ impl Default for LanguageConfig {
             autoclose_before: Default::default(),
             line_comments: Default::default(),
             block_comments: Default::default(),
-            documentation_comment: Default::default(),
             rewrap_prefixes: Default::default(),
             scope_opt_in_language_servers: Default::default(),
             overrides: Default::default(),
@@ -2166,11 +2179,6 @@ impl LanguageScope {
         )
     }
 
-    /// Config for documentation-style block comments for this language.
-    pub fn documentation_comment(&self) -> Option<&BlockCommentConfig> {
-        self.language.config.documentation_comment.as_ref()
-    }
-
     /// Returns additional regex patterns that act as prefix markers for creating
     /// boundaries during rewrapping.
     ///
@@ -2728,7 +2736,18 @@ pub fn rust_lang() -> Arc<Language> {
                 path_suffixes: vec!["rs".to_string()],
                 ..Default::default()
             },
-            line_comments: vec!["// ".into(), "/// ".into(), "//! ".into()],
+            line_comments: Some(LineCommentConfig {
+                prefixes: HashMap::from_iter([(
+                    CommentTypeTag::Line(CommentType::Generic),
+                    "// ".into()
+                ), (
+                    CommentTypeTag::Line(CommentType::Outer),
+                    "/// ".into()
+                ), (
+                    CommentTypeTag::Line(CommentType::Inner),
+                    "//! ".into()
+                )]),
+            }),
             ..Default::default()
         },
         Some(tree_sitter_rust::LANGUAGE.into()),
@@ -2980,57 +2999,54 @@ mod tests {
 
     #[test]
     fn test_deserializing_comments_backwards_compat() {
-        // current version of `block_comments` and `documentation_comment` work
+        // Does the current version of `block_comments` work?
         {
             let config: LanguageConfig = ::toml::from_str(
                 r#"
                 name = "Foo"
-                block_comments = { start = "a", end = "b", prefix = "c", tab_size = 1 }
-                documentation_comment = { start = "d", end = "e", prefix = "f", tab_size = 2 }
+                block_comments = {
+                    prefixes = [
+                        (Generic, "a", "b", "c"),
+                        (Outer, "d", "e", "f"),
+                        (Inner, "g", "h", "i")
+                    ]
+                }
                 "#,
             )
             .unwrap();
             assert_matches!(config.block_comments, Some(BlockCommentConfig { .. }));
-            assert_matches!(
-                config.documentation_comment,
-                Some(BlockCommentConfig { .. })
-            );
 
             let block_config = config.block_comments.unwrap();
-            assert_eq!(block_config.start.as_ref(), "a".to_string());
-            assert_eq!(block_config.end.as_ref(), "b");
-            assert_eq!(block_config.prefix.as_ref(), "c");
-            assert_eq!(block_config.tab_size, 1);
-
-            let doc_config = config.documentation_comment.unwrap();
-            assert_eq!(doc_config.start.as_ref(), "d");
-            assert_eq!(doc_config.end.as_ref(), "e");
-            assert_eq!(doc_config.prefix.as_ref(), "f");
-            assert_eq!(doc_config.tab_size, 2);
-        }
-
-        // former `documentation` setting is read into `documentation_comment`
-        {
-            let config: LanguageConfig = ::toml::from_str(
-                r#"
-                name = "Foo"
-                documentation = { start = "a", end = "b", prefix = "c", tab_size = 1}
-                "#,
-            )
-            .unwrap();
-            assert_matches!(
-                config.documentation_comment,
-                Some(BlockCommentConfig { .. })
+            assert_eq!(
+                block_config.prefixes.get(&CommentTypeTag::Block(CommentType::Generic)),
+                Some(&BlockCommentStruct {
+                        start: "a".into(),
+                        end: "b".into(),
+                        prefix: "c".into()
+                    }
+                )
             );
-
-            let config = config.documentation_comment.unwrap();
-            assert_eq!(config.start.as_ref(), "a");
-            assert_eq!(config.end.as_ref(), "b");
-            assert_eq!(config.prefix.as_ref(), "c");
-            assert_eq!(config.tab_size, 1);
+            assert_eq!(
+                block_config.prefixes.get(&CommentTypeTag::Block(CommentType::Outer)),
+                Some(&BlockCommentStruct {
+                        start: "d".into(),
+                        end: "e".into(),
+                        prefix: "f".into()
+                    }
+                )
+            );
+            assert_eq!(
+                block_config.prefixes.get(&CommentTypeTag::Block(CommentType::Inner)),
+                Some(&BlockCommentStruct {
+                        start: "g".into(),
+                        end: "h".into(),
+                        prefix: "i".into()
+                    }
+                )
+            );
         }
 
-        // old block_comments format is read into BlockCommentConfig
+        // See if the old block_comments format is read into BlockCommentConfig correctly.
         {
             let config: LanguageConfig = ::toml::from_str(
                 r#"
@@ -3042,10 +3058,15 @@ mod tests {
             assert_matches!(config.block_comments, Some(BlockCommentConfig { .. }));
 
             let config = config.block_comments.unwrap();
-            assert_eq!(config.start.as_ref(), "a");
-            assert_eq!(config.end.as_ref(), "b");
-            assert_eq!(config.prefix.as_ref(), "");
-            assert_eq!(config.tab_size, 0);
+            assert_eq!(
+                config.prefixes.get(&CommentTypeTag::Block(CommentType::Generic)),
+                Some(&BlockCommentStruct {
+                        start: "a".into(),
+                        end: "b".into(),
+                        prefix: "".into()
+                    }
+                )
+            );
         }
     }
 }
